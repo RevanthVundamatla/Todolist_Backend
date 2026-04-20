@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Todo List Backend with JWT, OTP/MFA, MongoDB, Razorpay",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
