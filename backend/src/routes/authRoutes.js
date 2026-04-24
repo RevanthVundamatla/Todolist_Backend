@@ -21,6 +21,7 @@ import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Rate Limiters
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -81,6 +82,12 @@ router.get(
   }),
   async (req, res) => {
     try {
+      // Check if JWT_SECRET exists to prevent the "must have a value" error
+      if (!process.env.JWT_SECRET) {
+        console.error('CRITICAL: JWT_SECRET is not defined in environment variables.');
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=server_configuration_error`);
+      }
+
       const token = jwt.sign(
         {
           id: req.user._id,
@@ -90,6 +97,7 @@ router.get(
         { expiresIn: '7d' }
       );
 
+      // Redirecting to FRONTEND_URL/oauth-success
       res.redirect(
         `${
           process.env.FRONTEND_URL || 'http://localhost:5173'
@@ -105,5 +113,13 @@ router.get(
     }
   }
 );
+
+// Fallback route in case the frontend is misconfigured
+router.get('/oauth-success', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Authentication successful. Please return to the app."
+    });
+});
 
 export default router;
