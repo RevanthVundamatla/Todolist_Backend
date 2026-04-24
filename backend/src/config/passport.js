@@ -1,6 +1,6 @@
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const User = require('../models/user');
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import User from '../models/userModel.js';
 
 passport.use(
   new GoogleStrategy(
@@ -11,24 +11,28 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
+        const email = profile.emails?.[0]?.value;
+
         let user = await User.findOne({ googleId: profile.id });
 
         if (!user) {
-          const existingUser = await User.findOne({ email: profile.emails[0].value });
+          const existingUser = await User.findOne({ email });
 
           if (existingUser) {
             existingUser.googleId = profile.id;
             existingUser.authProvider = 'google';
+            existingUser.isVerified = true;
             await existingUser.save();
             return done(null, existingUser);
           }
 
           user = await User.create({
             name: profile.displayName,
-            email: profile.emails[0].value,
+            email,
             googleId: profile.id,
             authProvider: 'google',
             isPremium: false,
+            isVerified: true,
           });
         }
 
@@ -40,4 +44,4 @@ passport.use(
   )
 );
 
-module.exports = passport;
+export default passport;
