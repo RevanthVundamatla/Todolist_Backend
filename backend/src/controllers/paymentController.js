@@ -2,15 +2,21 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import User from '../models/User.js';
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
 const PLANS = {
   monthly: { amount: 9900, duration: 30, label: '1 Month' },
   quarterly: { amount: 24900, duration: 90, label: '3 Months' },
   yearly: { amount: 79900, duration: 365, label: '1 Year' },
+};
+
+const getRazorpayInstance = () => {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error('Razorpay keys are missing in environment variables.');
+  }
+
+  return new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
 };
 
 export const createOrder = async (req, res) => {
@@ -31,13 +37,7 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return res.status(500).json({
-        success: false,
-        message: 'Razorpay configuration is missing.',
-      });
-    }
-
+    const razorpay = getRazorpayInstance();
     const selectedPlan = PLANS[plan];
 
     const order = await razorpay.orders.create({
@@ -176,33 +176,40 @@ export const getPlans = async (req, res) => {
 };
 
 export const getPaymentStatus = async (req, res) => {
-  const user = req.user;
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required.',
+      });
+    }
 
-  if (!user) {
-    return res.status(401).json({
+    const isPremiumActive =
+      req.user.isPremium &&
+      (!req.user.premiumExpiresAt ||
+        new Date(req.user.premiumExpiresAt) > new Date());
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        isPremium: isPremiumActive,
+        premiumExpiresAt: req.user.premiumExpiresAt,
+        daysRemaining: req.user.premiumExpiresAt
+          ? Math.max(
+              0,
+              Math.ceil(
+                (new Date(req.user.premiumExpiresAt) - Date.now()) /
+                  (1000 * 60 * 60 * 24)
+              )
+            )
+          : null,
+      },
+    });
+  } catch (err) {
+    console.error('Payment Status Error:', err);
+    return res.status(500).json({
       success: false,
-      message: 'User authentication required.',
+      message: err.message || 'Failed to fetch payment status.',
     });
   }
-
-  const isPremiumActive =
-    user.isPremium &&
-    (!user.premiumExpiresAt || user.premiumExpiresAt > new Date());
-
-  return res.status(200).json({
-    success: true,
-    data: {
-      isPremium: isPremiumActive,
-      premiumExpiresAt: user.premiumExpiresAt,
-      daysRemaining: user.premiumExpiresAt
-        ? Math.max(
-            0,
-            Math.ceil(
-              (user.premiumExpiresAt - Date.now()) /
-                (1000 * 60 * 60 * 24)
-            )
-          )
-        : null,
-    },
-  });
 };
