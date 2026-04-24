@@ -13,12 +13,29 @@ const PLANS = {
   yearly: { amount: 79900, duration: 365, label: '1 Year' },
 };
 
-export const createOrder = async (req, res, next) => {
+export const createOrder = async (req, res) => {
   try {
     const { plan = 'monthly' } = req.body;
 
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required.',
+      });
+    }
+
     if (!PLANS[plan]) {
-      return res.status(400).json({ success: false, message: 'Invalid plan selected.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid plan selected.',
+      });
+    }
+
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: 'Razorpay configuration is missing.',
+      });
     }
 
     const selectedPlan = PLANS[plan];
@@ -34,7 +51,9 @@ export const createOrder = async (req, res, next) => {
       },
     });
 
-    await User.findByIdAndUpdate(req.user._id, { razorpayOrderId: order.id });
+    await User.findByIdAndUpdate(req.user._id, {
+      razorpayOrderId: order.id,
+    });
 
     return res.status(200).json({
       success: true,
@@ -51,16 +70,35 @@ export const createOrder = async (req, res, next) => {
       },
     });
   } catch (err) {
-    next(err);
+    console.error('Create Order Error:', err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to create payment order.',
+    });
   }
 };
 
-export const verifyPayment = async (req, res, next) => {
+export const verifyPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan = 'monthly' } = req.body;
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      plan = 'monthly',
+    } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required.',
+      });
+    }
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: 'Payment details incomplete.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Payment details incomplete.',
+      });
     }
 
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
@@ -70,11 +108,16 @@ export const verifyPayment = async (req, res, next) => {
       .digest('hex');
 
     if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ success: false, message: 'Payment verification failed. Invalid signature.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Payment verification failed. Invalid signature.',
+      });
     }
 
     const selectedPlan = PLANS[plan] || PLANS.monthly;
-    const premiumExpiresAt = new Date(Date.now() + selectedPlan.duration * 24 * 60 * 60 * 1000);
+    const premiumExpiresAt = new Date(
+      Date.now() + selectedPlan.duration * 24 * 60 * 60 * 1000
+    );
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
@@ -97,7 +140,11 @@ export const verifyPayment = async (req, res, next) => {
       },
     });
   } catch (err) {
-    next(err);
+    console.error('Verify Payment Error:', err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Payment verification failed.',
+    });
   }
 };
 
@@ -130,7 +177,17 @@ export const getPlans = async (req, res) => {
 
 export const getPaymentStatus = async (req, res) => {
   const user = req.user;
-  const isPremiumActive = user.isPremium && (!user.premiumExpiresAt || user.premiumExpiresAt > new Date());
+
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: 'User authentication required.',
+    });
+  }
+
+  const isPremiumActive =
+    user.isPremium &&
+    (!user.premiumExpiresAt || user.premiumExpiresAt > new Date());
 
   return res.status(200).json({
     success: true,
@@ -138,7 +195,13 @@ export const getPaymentStatus = async (req, res) => {
       isPremium: isPremiumActive,
       premiumExpiresAt: user.premiumExpiresAt,
       daysRemaining: user.premiumExpiresAt
-        ? Math.max(0, Math.ceil((user.premiumExpiresAt - Date.now()) / (1000 * 60 * 60 * 24)))
+        ? Math.max(
+            0,
+            Math.ceil(
+              (user.premiumExpiresAt - Date.now()) /
+                (1000 * 60 * 60 * 24)
+            )
+          )
         : null,
     },
   });
