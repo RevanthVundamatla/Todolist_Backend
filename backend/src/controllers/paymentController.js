@@ -2,6 +2,9 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import User from '../models/User.js';
 
+console.log('Razorpay Key Loaded:', !!process.env.RAZORPAY_KEY_ID);
+console.log('Razorpay Secret Loaded:', !!process.env.RAZORPAY_KEY_SECRET);
+
 const PLANS = {
   monthly: { amount: 9900, duration: 30, label: '1 Month' },
   quarterly: { amount: 24900, duration: 90, label: '3 Months' },
@@ -71,9 +74,11 @@ export const createOrder = async (req, res) => {
     });
   } catch (err) {
     console.error('Create Order Error:', err);
+
     return res.status(500).json({
       success: false,
-      message: err.message || 'Failed to create payment order.',
+      message: 'Failed to create payment order.',
+      error: err.error?.description || err.message || 'Unknown error',
     });
   }
 };
@@ -141,9 +146,11 @@ export const verifyPayment = async (req, res) => {
     });
   } catch (err) {
     console.error('Verify Payment Error:', err);
+
     return res.status(500).json({
       success: false,
-      message: err.message || 'Payment verification failed.',
+      message: 'Payment verification failed.',
+      error: err.error?.description || err.message || 'Unknown error',
     });
   }
 };
@@ -207,9 +214,11 @@ export const getPaymentStatus = async (req, res) => {
     });
   } catch (err) {
     console.error('Payment Status Error:', err);
+
     return res.status(500).json({
       success: false,
-      message: err.message || 'Failed to fetch payment status.',
+      message: 'Failed to fetch payment status.',
+      error: err.message || 'Unknown error',
     });
   }
 };
