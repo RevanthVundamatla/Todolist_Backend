@@ -5,7 +5,13 @@ export const protect = async (req, res, next) => {
   try {
     let token;
 
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    // Debug log: check incoming auth header
+    console.log('Authorization Header:', req.headers.authorization);
+
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith('Bearer ')
+    ) {
       token = req.headers.authorization.split(' ')[1];
     }
 
@@ -18,7 +24,10 @@ export const protect = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findById(decoded.userId).select('-password -refreshToken');
+    console.log('Decoded JWT:', decoded);
+
+    const user = await User.findById(decoded.userId)
+      .select('-password -refreshToken');
 
     if (!user) {
       return res.status(401).json({
@@ -27,7 +36,7 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    if (user.isLocked()) {
+    if (user.isLocked && user.isLocked()) {
       return res.status(423).json({
         success: false,
         message: 'Account temporarily locked due to too many failed attempts.',
@@ -37,22 +46,41 @@ export const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
+    console.error('Authentication Error:', err);
+
     if (err.name === 'JsonWebTokenError') {
-      return res.status(401).json({ success: false, message: 'Invalid token.' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token.',
+      });
     }
+
     if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ success: false, message: 'Token expired.' });
+      return res.status(401).json({
+        success: false,
+        message: 'Token expired. Please log in again.',
+      });
     }
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
   }
 };
 
 export const requirePremium = (req, res, next) => {
-  if (!req.user.isPremium || (req.user.premiumExpiresAt && req.user.premiumExpiresAt < new Date())) {
+  const isPremiumActive =
+    req.user?.isPremium &&
+    (!req.user?.premiumExpiresAt ||
+      new Date(req.user.premiumExpiresAt) > new Date());
+
+  if (!isPremiumActive) {
     return res.status(403).json({
       success: false,
-      message: 'This feature requires a premium subscription.',
+      message: 'This feature requires an active premium subscription.',
     });
   }
+
   next();
 };
