@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import passport from './src/config/passport.js';
+
 import connectDB from './src/config/db.js';
 import authRoutes from './src/routes/authRoutes.js';
 import todoRoutes from './src/routes/todoRoutes.js';
@@ -15,13 +17,15 @@ const PORT = process.env.PORT || 5000;
 // Establish database connection
 connectDB();
 
-// Trust proxy is required for rate-limiting to work correctly on Render/Heroku
+// Trust proxy (required for Render/Heroku and rate limiting)
 app.set('trust proxy', 1);
 
 // Security Middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // CORS Configuration
 const allowedOrigins = [
@@ -49,14 +53,21 @@ app.use(
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
+// Initialize Passport
+app.use(passport.initialize());
+
 // Rate Limiting
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many requests from this IP. Try again later.' },
+  message: {
+    success: false,
+    message: 'Too many requests from this IP. Try again later.',
+  },
 });
+
 app.use(globalLimiter);
 
 // Health Check Route
@@ -69,7 +80,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Routes
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/todos', todoRoutes);
 app.use('/api/payment', paymentRoutes);
@@ -80,11 +91,11 @@ app.use(errorHandler);
 
 // Start Server
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-// Handle Unhandled Rejections
+// Handle Unhandled Promise Rejections
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Promise Rejection:', err.message);
   server.close(() => process.exit(1));
