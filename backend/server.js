@@ -14,34 +14,42 @@ import { errorHandler, notFound } from './src/middleware/errorHandler.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Establish database connection
+// DB
 connectDB();
 
-// Trust proxy (required for Render/Heroku and rate limiting)
+// trust proxy (Render fix)
 app.set('trust proxy', 1);
 
-// Security Middleware
+// security
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 
-// CORS Configuration
+//
+// 🚀 FIXED CORS (IMPORTANT PART)
+//
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:5173',
   'http://localhost:3000',
-].filter(Boolean);
+  'https://todo-list-interface--revanthvundamat.replit.app'
+];
 
+// CLEAN CORS HANDLER (IMPORTANT FIX)
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+    origin: function (origin, callback) {
+      // allow tools like Postman
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+
+      console.log("❌ Blocked by CORS:", origin);
+      return callback(new Error('CORS Not Allowed'), false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -49,64 +57,46 @@ app.use(
   })
 );
 
-// Body Parsers
+// body parser
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-// Initialize Passport
+// passport
 app.use(passport.initialize());
 
-// Rate Limiting
+// rate limiter
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many requests from this IP. Try again later.',
+    message: 'Too many requests, try again later.',
   },
 });
 
 app.use(globalLimiter);
 
-// Health Check Route
+// health check
 app.get('/health', (req, res) => {
-  res.status(200).json({
+  res.json({
     success: true,
-    message: 'TodoApp API is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
+    message: 'API running',
+    time: new Date(),
   });
 });
 
-// API Routes
+// routes
 app.use('/api/auth', authRoutes);
 app.use('/api/todos', todoRoutes);
 app.use('/api/payment', paymentRoutes);
 
-// Error Handling Middleware
+// errors
 app.use(notFound);
 app.use(errorHandler);
 
-// Start Server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
-
-// Handle Unhandled Promise Rejections
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Promise Rejection:', err.message);
-  server.close(() => process.exit(1));
-});
-
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
-  server.close(() => {
-    console.log('Process terminated.');
-  });
+// start
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on ${PORT}`);
 });
 
 export default app;
